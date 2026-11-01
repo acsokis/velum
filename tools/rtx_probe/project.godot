@@ -1,0 +1,10 @@
+config_version=5
+[application]
+config/name="VELUM RTX probe"
+run/main_scene="res://probe.tscn"
+[display]
+window/size/viewport_width=960
+window/size/viewport_height=540
+[rendering]
+renderer/rendering_method="gl_forward_plus"
+rendering_device/driver.windows="d3d12"
