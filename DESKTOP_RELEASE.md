@@ -1,12 +1,9 @@
-# VELUM Windows preview
+# VELUM for Windows
 
-Extract the complete ZIP to a writable folder, then run `RUN_VELUM.cmd`.
-No Godot installation or Node.js is required. Windows may display a warning for this unsigned development build.
+Extract the ZIP and run `RUN_VELUM.cmd`. No engine installation is required. Use `RUN_DX12.cmd` for the standard graphics mode. Unsupported graphics options are disabled automatically.
 
-This portable release uses official Godot 4.7.2 with Direct3D 12. It is the compatibility desktop preview, not the custom NVIDIA engine build: DLSS/RTX frame generation are not included. The separately validated NVIDIA development package remains a different build.
+WASD move, mouse look, Shift run, Space jump, E hatch/interact/gather, T tool, C upgrade, F recharge, Tab terminal, F10 graphics, F5/F9 save/load. Music starts OFF; ambience has separate controls.
 
-WASD: movement; mouse: look; Shift: run; Space: jump; E: hatch/interact/hold to gather; T: salvage mode; C: upgrade; F: checkpoint; F5/F9: save/load. Use the in-game terminal and graphics controls for other panels and settings. Music starts OFF.
+Saves are stored in `runtime` beside the launcher. This is an unsigned early preview; performance and hardware support vary. Frame generation and GPU rigid-body physics are unavailable. The game works without a companion.
 
-Saves and logs are stored in `runtime` beside the executable. The game remains fully playable without a companion; this standalone release runs with LINK networking disabled and does not bundle a Node server. Twitch/Discord adapters are mocks. Web and native rendering have different supported features. This is a bounded procedural labyrinth prototype, not a completed seamless planet.
-
-Engine and audio license notices are included alongside the executable. No personal saves, pairing keys or account credentials are included.
+Bundled engine and third-party components retain their license notices. NVIDIA components in `build-rtx` are supplied only as part of VELUM, subject to their included terms; do not redistribute them as standalone SDKs.

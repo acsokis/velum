@@ -10,9 +10,13 @@ uniform vec3 cloud_origin = vec3(0.0,2.0,0.0);
 uniform float cloud_altitude = 35.0;
 uniform float cloud_clock = 0.0;
 uniform float cloud_weather = 0.0;
+uniform float cloud_amount = 0.18;
+uniform vec2 wind_offset = vec2(0.0);
 uniform float daylight = 1.0;
 uniform vec2 procedural_offset = vec2(0.0);
 uniform sampler2D spectral_field : repeat_enable, filter_linear;
+uniform sampler2D spectral_previous : repeat_enable, filter_linear;
+uniform float spectral_blend = 1.0;
 uniform bool spectral_enabled = false;
 uniform vec3 zenith_color : source_color = vec3(0.025, 0.032, 0.027);
 uniform vec3 horizon_color : source_color = vec3(0.23, 0.21, 0.15);
@@ -50,15 +54,9 @@ vec3 atmosphere(vec3 ray) {
 	color += vec3(0.07, 0.09, 0.055) * exp(-abs(ray.y - 0.10) * 9.0);
 	float sun = max(dot(ray, SUN_DIR), 0.0);
 	color += vec3(0.65, 0.38, 0.14) * pow(sun, 22.0) * 0.23;
-	if (spectral_enabled && ray.y > 0.05) {
-		vec2 p = ray.xz/max(ray.y,0.13)*0.42;
-		float angle = TIME*0.012;
-		p = mat2(vec2(cos(angle),sin(angle)),vec2(-sin(angle),cos(angle)))*p;
-		float wave = texture(spectral_field,p).r;
-		float ridges = smoothstep(0.42,0.58,wave)*(1.0-smoothstep(0.54,0.76,wave));
-		color += mix(vec3(0.025,0.035,0.12),vec3(0.08,0.23,0.19),wave)*ridges*smoothstep(0.05,0.6,ray.y)*1.4;
-	}
-	return mix(vec3(0.055, 0.07, 0.045), color, smoothstep(-0.24, 0.01, ray.y));
+	// Infinite, deliberately low-detail underworld horizon matches the local FFT surface.
+	vec3 haze = mix(vec3(0.012,0.028,0.05),vec3(0.055,0.18,0.16),0.5);
+	return mix(haze, color, smoothstep(-0.04, 0.01, ray.y));
 }
 
 vec4 cable_layer(vec3 ray,float altitude,float angle,vec2 offset,float layer_id) {
@@ -101,7 +99,7 @@ vec3 cable_canopy(vec3 ray) {
 	vec4 near = cable_layer(ray,0.90,1.78,vec2(0.0,1.0),2.0);
 	color = mix(color,far.rgb*0.65+atmosphere(ray)*0.35,far.a);
 	color = mix(color,middle.rgb*0.82+atmosphere(ray)*0.18,middle.a);
-	return mix(color,near.rgb,near.a)+vec3(0.12,0.28,0.22)*signal_storm;
+	return mix(color,near.rgb,near.a);
 }
 
 vec4 cloud_layer(vec3 ray, float altitude, vec2 wind, float opacity) {
@@ -113,11 +111,12 @@ vec4 cloud_layer(vec3 ray, float altitude, vec2 wind, float opacity) {
 	// This lower cloud field is shared analytically with the rain emitter on the CPU.
 	if (altitude < 2.0) {
 		vec2 world = cloud_origin.xz+ray.xz/max(ray.y,0.055)*max(1.0,cloud_altitude-cloud_origin.y);
-		vec2 q = world+vec2(cloud_clock*0.60,cloud_clock*0.22)+procedural_offset;
+		vec2 q = world+wind_offset+procedural_offset;
 		float field = 0.5+sin(q.x*0.055)*0.23+sin(q.y*0.043)*0.20+sin((q.x+q.y)*0.031)*0.10+cloud_weather*0.12;
-		float cover = smoothstep(0.50,0.73,field);
-		density = max(density*0.25,cover*0.88);
+		float cover = smoothstep(0.50,0.73,field)*max(cloud_amount,cloud_weather);
+		density = cover*(0.72+0.28*density);
 	}
+	else { density *= cloud_amount; }
 	// Quantized cells make the condensation feel assembled, not a painted cloud texture.
 	vec2 tile = p * 13.0;
 	vec2 cell = floor(tile);
@@ -134,20 +133,28 @@ vec4 cloud_layer(vec3 ray, float altitude, vec2 wind, float opacity) {
 	float conductor = seam * step(0.88, tile_height) * smoothstep(0.12, 0.50, density);
 	float pulse = 0.65 + 0.35 * sin(TIME * 0.45 + tile_height * 40.0);
 	shade += vec3(0.10, 0.75, 0.65) * conductor * pulse * 0.9;
+	// Glitch fragments are part of the condensation, never a separate sky overlay.
+	float glitch_cell = step(0.80,hash21(cell+floor(cloud_clock*7.0)));
+	float glitch_line = step(0.75,fract(tile.y*0.25+floor(cloud_clock*11.0)*0.17));
+	float glitch = glitch_cell*glitch_line*signal_glitch;
+	shade += vec3(0.12,0.85,0.65)*(glitch+signal_storm*0.35);
+	density *= 1.0-glitch*0.7;
+	if (spectral_enabled) {
+		float wave = mix(texture(spectral_previous,p*0.05).r,texture(spectral_field,p*0.05).r,spectral_blend);
+		shade *= 0.92+wave*0.16;
+	}
 	float fade = smoothstep(0.025, 0.17, ray.y);
 	return vec4(shade, clamp(density * opacity * fade, 0.0, 0.93));
 }
 
 void sky() {
 	vec3 ray = normalize(EYEDIR);
-	float shear_band = step(0.92,fract(ray.y*27.0+floor(TIME*5.0)*0.13));
-	ray.x += shear_band*signal_glitch*0.012;
 	if (AT_CUBEMAP_PASS) {
 		// Animated reflections stay inexpensive: clouds are evaluated in the half-res background.
 		COLOR = atmosphere(ray);
 	} else if (AT_HALF_RES_PASS) {
 		if (ray.y > 0.025) {
-			vec2 wind = vec2(TIME * 0.014, -TIME * 0.007) * cloud_speed;
+			vec2 wind = wind_offset*0.025*cloud_speed;
 			vec4 high = cloud_layer(ray, 3.4, wind * 0.42 + vec2(37.0, 11.0), 0.72);
 			vec4 low = cloud_layer(ray, 1.55, wind + vec2(4.0, 9.0), 0.94);
 			float alpha = low.a + high.a * (1.0 - low.a);
@@ -174,7 +181,7 @@ void sky() {
 		float star = (1.0 - smoothstep(0.015, 0.09, length(fract(star_uv) - center))) * step(0.988, hash21(star_cell + 29.0));
 		color += vec3(0.15, 0.30, 0.12) * star * smoothstep(0.2, 0.7, ray.y) * 0.2;
 		if (web_profile && ray.y > 0.025) {
-			vec2 wind = vec2(TIME * 0.014, -TIME * 0.007) * cloud_speed;
+			vec2 wind = wind_offset*0.025*cloud_speed;
 			vec4 cloud = cloud_layer(ray, 1.55, wind + vec2(4.0, 9.0), 0.94);
 			COLOR = mix(color, cloud.rgb, cloud.a);
 		} else {

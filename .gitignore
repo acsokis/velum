@@ -16,3 +16,14 @@ node_modules/
 *.zip
 dist/
 .vscode/settings.json
+.agents/
+GRAPHICS.md
+VALIDATION.md
+INTEGRATIONS.md
+WEB.md
+.vscode/
+BUILD.ps1
+BUILD_WEB.ps1
+tools/*
+!tools/serve-web.mjs
+!tools/Test-RtxPackage.ps1

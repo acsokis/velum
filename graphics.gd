@@ -33,9 +33,12 @@ var web_scale = 0.75
 var frame_ms = 16.67
 var performance_clock = 0.0
 var performance_samples: Array[float] = []
+var rtx_allowed = false
 
 func setup(owner_game):
 	game = owner_game
+	var adapter = RenderingServer.get_video_adapter_name().to_upper()
+	rtx_allowed = "NVIDIA" in RenderingServer.get_video_adapter_vendor().to_upper() and "RTX" in adapter and not OS.has_feature("web") and not "--no-rtx" in OS.get_cmdline_user_args()
 	if OS.has_feature("web"): settings.preset = 0;settings.scale = 0.75
 	env = game.world_environment.environment
 	sun = game.directional_sun
@@ -43,11 +46,11 @@ func setup(owner_game):
 	test_mode = game.smoke or game.terrain_test or game.visual_test
 	config_path = game.runtime_dir.path_join("graphics.cfg")
 	voxel_cache = game.runtime_dir.path_join("voxel-gi-%d-circuits5-godot%d.res" % [game.WORLD_SEED,Engine.get_version_info().minor])
-	if ClassDB.class_has_integer_constant("Viewport","SCALING_3D_MODE_DLSS"):
+	if rtx_allowed and ClassDB.class_has_integer_constant("Viewport","SCALING_3D_MODE_DLSS"):
 		dlss_mode = ClassDB.class_get_integer_constant("Viewport","SCALING_3D_MODE_DLSS")
 	for p in game.get_viewport().get_property_list():
-		if p.name == "frame_generation": fg_property = true
-	if Engine.has_singleton("Streamline"):
+		if p.name == "frame_generation" and rtx_allowed: fg_property = true
+	if Engine.has_singleton("Streamline") and rtx_allowed:
 		streamline = Engine.get_singleton("Streamline")
 		var dlss_supported = streamline.call("get_capability",ClassDB.class_get_integer_constant("Streamline","STREAMLINE_CAPABILITY_DLSS"))
 		var fg_supported = streamline.call("get_capability",ClassDB.class_get_integer_constant("Streamline","STREAMLINE_CAPABILITY_DLSS_G"))
@@ -66,9 +69,11 @@ func setup(owner_game):
 		if ("dlss" in key.to_lower() or "frame_generation" in key.to_lower()) and key.begins_with("is_"):
 			native_queries[key] = true
 	settings["rtx_voxel_default"] = false
+	settings["interactive_gi_default"] = false
 	if not test_mode: read_settings()
-	if dlss_mode >= 0 and not settings.rtx_voxel_default:
-		settings.gi = true;settings.gi_mode = "voxel";settings.upscaler = "dlss_quality";settings.rtx_voxel_default = true
+	if dlss_mode >= 0 and not settings.interactive_gi_default:
+		# Live GI avoids a blocking 512-voxel bake during startup and every section transition.
+		settings.gi = true;settings.gi_mode = "sdfgi";settings.upscaler = "dlss_quality";settings.interactive_gi_default = true
 	if dlss_mode >= 0 and not FileAccess.file_exists(config_path):
 		settings.upscaler = "dlss_quality";settings.fg = fg_property and framegen_verified
 		if settings.fg: settings.mode = 1
@@ -263,6 +268,10 @@ func apply_display(s: Dictionary):
 	DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_ENABLED if s.vsync else DisplayServer.VSYNC_DISABLED)
 
 func apply_render(s: Dictionary):
+	# Recheck every application, including edited settings and caller-supplied dictionaries.
+	if not rtx_allowed or dlss_mode < 0:
+		if str(s.upscaler).begins_with("dlss"): s.upscaler = "native"
+		s.fg = false
 	if OS.has_feature("web"):
 		env.sdfgi_enabled = false
 		env.volumetric_fog_enabled = false
@@ -378,6 +387,7 @@ func revert_display():
 	apply_render(settings);apply_display(settings);refresh_ui()
 
 func set_framegen(enabled: bool):
+	if enabled and (not rtx_allowed or not fg_property or (not framegen_verified and not game.dlss_test)): return
 	if fg_property and enabled != fg_last:
 		if enabled: DisplayServer.window_set_vsync_mode(DisplayServer.VSYNC_DISABLED)
 		if enabled and streamline != null:

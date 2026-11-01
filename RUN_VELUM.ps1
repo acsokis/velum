@@ -3,12 +3,14 @@ $ErrorActionPreference = 'Stop'
 Set-Location -LiteralPath $PSScriptRoot
 if (-not $Source) { $Build = $true; if (-not $DX12) { $RTX = $true } }
 $engine = Join-Path $PSScriptRoot '.tools\godot\Godot_v4.7.2-stable_win64_console.exe'
-if (-not (Test-Path -LiteralPath $engine)) { throw 'Portable Godot missing from project .tools folder.' }
+if ($Source -and -not (Test-Path -LiteralPath $engine)) { throw 'Portable Godot missing from project .tools folder.' }
 New-Item -ItemType Directory -Path (Join-Path $PSScriptRoot 'runtime') -Force | Out-Null
 $env:VELUM_DATA_DIR = Join-Path $PSScriptRoot 'runtime'
 . (Join-Path $PSScriptRoot 'tools\Test-RtxPackage.ps1')
-$useRtx = $Build -and (-not $DX12) -and (Test-VelumRtxPackage $PSScriptRoot)
-if ($RTX -and -not $useRtx) { throw 'The NVIDIA package has not passed validation for the current build. Use RUN_DX12.cmd for the standard build.' }
+$rtxHardware = $false
+try { $rtxHardware = @((Get-CimInstance Win32_VideoController -ErrorAction Stop) | Where-Object { $_.Name -match 'NVIDIA.*RTX' }).Count -gt 0 } catch { }
+$useRtx = $Build -and (-not $DX12) -and $rtxHardware -and (Test-VelumRtxPackage $PSScriptRoot)
+if ($RTX -and -not $useRtx) { Write-Output 'RTX hardware/package unavailable: using the standard Direct3D 12 build.' }
 $server = $null
 $env:VELUM_LINK_DISABLED = '1'
 $linkSocket = [Net.Sockets.TcpClient]::new()
@@ -18,7 +20,7 @@ try {
 } catch { $portBusy = $false } finally { $linkSocket.Dispose() }
 if ($portBusy) {
     Write-Warning 'LINK port 8787 is already in use. Starting the game offline; the existing process is left running.'
-} elseif (Get-Command node.exe -ErrorAction SilentlyContinue) {
+} elseif ((Test-Path -LiteralPath (Join-Path $PSScriptRoot 'server.mjs')) -and (Get-Command node.exe -ErrorAction SilentlyContinue)) {
     try {
         $server = Start-Process -FilePath (Get-Command node.exe).Source -ArgumentList 'server.mjs' -WorkingDirectory $PSScriptRoot -WindowStyle Hidden -PassThru -RedirectStandardOutput 'runtime\link.log' -RedirectStandardError 'runtime\link-error.log'
         Start-Sleep -Milliseconds 700

@@ -3,9 +3,6 @@ on:
   workflow_dispatch:
   release:
     types: [published]
-  push:
-    branches: [main]
-    paths: [.github/workflows/pages.yml]
 permissions:
   contents: read
   pages: write
@@ -20,12 +17,15 @@ jobs:
       name: github-pages
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
+      - uses: actions/checkout@v4
       - name: Download published standalone game
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release download v0.1.0-preview --repo "$GITHUB_REPOSITORY" --pattern VELUM-web.zip
-          echo '2d889dcfa4534d58cef03c791ebcfa30a801116958128a4e3b35eb7e6c895ecf  VELUM-web.zip' | sha256sum --check
+          tag=$(jq -r .tag releases/web-build.json)
+          digest=$(jq -r .sha256 releases/web-build.json)
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --pattern VELUM-web.zip
+          echo "$digest  VELUM-web.zip" | sha256sum --check
           # Windows Compress-Archive emits backslash paths; unzip returns 1 for that warning.
           unzip -q VELUM-web.zip -d release || test "$?" -eq 1
           test -f release/build-web/index.html

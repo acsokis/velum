@@ -62,6 +62,9 @@ func burst(position: Vector3):
 
 func _physics_process(delta):
 	for i in range(debris.size()-1,-1,-1):
+		if game.weather != null:
+			var body: RigidBody3D = debris[i].node
+			body.apply_central_force((game.weather.wind-body.linear_velocity)*body.mass*0.45)
 		debris[i].life -= delta
 		if debris[i].life <= 0:
 			debris[i].node.queue_free();debris.remove_at(i)

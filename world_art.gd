@@ -331,7 +331,8 @@ func batch_static_geometry():
 		for surface in range(n.mesh.get_surface_count()):
 			var material: Material = n.get_active_material(surface)
 			if material == null: continue
-			var cell_size = 48.0 if OS.has_feature("web") else 24.0
+			# Shared 48 m tiles halve native material batches while retaining local culling.
+			var cell_size = 48.0
 			var cell = Vector2i(floori(n.global_position.x/cell_size),floori(n.global_position.z/cell_size))
 			var primitive = n.mesh.surface_get_primitive_type(surface) if n.mesh is ArrayMesh else Mesh.PRIMITIVE_TRIANGLES
 			var key = "%s/%d/%d/%d" % [material.get_instance_id(),cell.x,cell.y,primitive]

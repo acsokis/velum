@@ -9,6 +9,10 @@ var dof_enabled = true
 var spectral_enabled = true
 var aperture = 8.0
 var target_fps = 144
+var spectral_blend = 1.0
+var last_revision = 1
+var last_completion = 0.0
+var blend_duration = 0.1667
 
 func setup(owner_game):
 	game = owner_game
@@ -16,9 +20,12 @@ func setup(owner_game):
 		target_fps = 60;dof_enabled = false
 	field.setup(game.WORLD_SEED)
 	game.atmosphere_material.set_shader_parameter("spectral_field",field.texture)
+	game.atmosphere_material.set_shader_parameter("spectral_previous",field.previous_texture)
 	game.atmosphere_material.set_shader_parameter("spectral_enabled",true)
-	var surface = PlaneMesh.new();surface.size = Vector2(760,760);surface.subdivide_width = 95;surface.subdivide_depth = 95
+	var surface = PlaneMesh.new();surface.size = Vector2(320,320)
+	surface.subdivide_width = 47 if OS.has_feature("web") else 95;surface.subdivide_depth = surface.subdivide_width
 	var gel_material = ShaderMaterial.new();gel_material.shader = load("res://shaders/spectral_gel.gdshader");gel_material.set_shader_parameter("spectral_field",field.texture)
+	gel_material.set_shader_parameter("spectral_previous",field.previous_texture)
 	gel = game.mesh_at(game,surface,Vector3(0,-14,0),Vector3.ONE,gel_material);gel.name = "SpectralUnderworld"
 	gel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var quad = QuadMesh.new();quad.size = Vector2(2,2)
@@ -56,8 +63,20 @@ func save_preferences():
 func _process(delta):
 	if game == null: return
 	elapsed += delta;update_clock += delta
-	if spectral_enabled and update_clock >= (0.1667 if OS.has_feature("web") else 0.1):
-		update_clock = 0;field.update(elapsed)
+	# Follow the view without moving the world-space wave phase. The distant field dissolves into haze.
+	gel.position.x = floor(game.camera.global_position.x/16)*16
+	gel.position.z = floor(game.camera.global_position.z/16)*16
+	gel.material_override.set_shader_parameter("view_origin",game.camera.global_position)
+	if spectral_enabled:
+		if not field.busy and update_clock >= (0.1667 if OS.has_feature("web") else 0.1):
+			update_clock = 0;field.begin_update(elapsed)
+		field.process_budget(350 if OS.has_feature("web") else 500)
+		if field.revision != last_revision:
+			last_revision = field.revision;spectral_blend = 0
+			blend_duration = maxf(0.1,elapsed-last_completion);last_completion = elapsed
+		spectral_blend = minf(1,spectral_blend+delta/blend_duration)
+	game.atmosphere_material.set_shader_parameter("spectral_blend",spectral_blend)
+	gel.material_override.set_shader_parameter("spectral_blend",spectral_blend)
 	game.atmosphere_material.set_shader_parameter("spectral_enabled",spectral_enabled)
 	gel.visible = spectral_enabled
 	gel.material_override.set_shader_parameter("discharges",game.weather.flashes and game.weather.enabled)

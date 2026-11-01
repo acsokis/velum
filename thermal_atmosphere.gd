@@ -11,6 +11,10 @@ var vapor_strength = 0.0
 var wakes: Array[Dictionary] = []
 var wake_clock = 0.0
 var wake_injections = 0
+var render_clock = 0.0
+var render_delta = 0.0
+var wake_positions = PackedVector4Array()
+var wake_flows = PackedVector4Array()
 
 func emit_wake(position: Vector3, velocity: Vector3):
 	if velocity.length() < 0.35: return
@@ -19,7 +23,7 @@ func emit_wake(position: Vector3, velocity: Vector3):
 	wake_injections += 1
 
 func airflow_at(point: Vector3) -> Vector3:
-	var result = Vector3.ZERO
+	var result: Vector3 = weather.wind*0.35
 	for wake in wakes:
 		var offset: Vector3 = point-wake.position
 		var influence = exp(-offset.length_squared()*0.25)*exp(-wake.age*0.9)
@@ -49,6 +53,12 @@ func temperature_at(point: Vector3) -> float:
 	return result
 
 func step(delta: float):
+	# Atmosphere is interpolated visually by shader TIME; it does not need 144 CPU uploads/s.
+	render_clock += delta
+	render_delta += delta
+	if render_clock < (1.0/20.0 if OS.has_feature("web") else 1.0/30.0): return
+	render_clock = fmod(render_clock,1.0/20.0 if OS.has_feature("web") else 1.0/30.0)
+	delta = render_delta;render_delta = 0.0
 	for wake in wakes:
 		wake.age += delta
 		wake.position += (wake.velocity*0.12+Vector3.UP*0.4)*delta
@@ -62,7 +72,7 @@ func step(delta: float):
 			if c.node.position.distance_squared_to(game.player.position) < 225:
 				emit_wake(c.node.position,c.node.velocity);count += 1
 				if count >= 2: break
-	var wake_positions = PackedVector4Array();var wake_flows = PackedVector4Array()
+	wake_positions.clear();wake_flows.clear()
 	for wake in wakes:
 		wake_positions.append(Vector4(wake.position.x,wake.position.y,wake.position.z,exp(-wake.age*0.9)))
 		wake_flows.append(Vector4(wake.velocity.x,wake.velocity.y,wake.velocity.z,0))
@@ -93,6 +103,7 @@ func step(delta: float):
 			fog[i].position = p+Vector3(0,1.5,0)
 			fog[i].material.set_shader_parameter("condensation",condensation*0.045)
 			fog[i].material.set_shader_parameter("wakes",wake_positions);fog[i].material.set_shader_parameter("flows",wake_flows)
+			fog[i].material.set_shader_parameter("wind",weather.wind)
 			fog[i].visible = game.world_environment.environment.volumetric_fog_enabled
 		var screen = game.camera.unproject_position(p+Vector3(0,1.8,0))/game.get_viewport().get_visible_rect().size
 		var visible = not game.camera.is_position_behind(p)
