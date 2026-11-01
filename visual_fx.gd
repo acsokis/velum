@@ -26,7 +26,7 @@ func setup(owner_game):
 	surface.subdivide_width = 47 if OS.has_feature("web") else 95;surface.subdivide_depth = surface.subdivide_width
 	var gel_material = ShaderMaterial.new();gel_material.shader = load("res://shaders/spectral_gel.gdshader");gel_material.set_shader_parameter("spectral_field",field.texture)
 	gel_material.set_shader_parameter("spectral_previous",field.previous_texture)
-	gel = game.mesh_at(game,surface,Vector3(0,-14,0),Vector3.ONE,gel_material);gel.name = "SpectralUnderworld"
+	gel = game.mesh_at(game,surface,Vector3(0,-0.65,0),Vector3.ONE,gel_material);gel.name = "SpectralUnderworld"
 	gel.cast_shadow = GeometryInstance3D.SHADOW_CASTING_SETTING_OFF
 	var quad = QuadMesh.new();quad.size = Vector2(2,2)
 	# Screen texture excludes transparency: run before glass/fluid and labels so they remain visible.

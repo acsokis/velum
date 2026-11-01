@@ -16,7 +16,7 @@ vec2 swirl(vec2 p) {
 void vertex() {
 	world_pos = (MODEL_MATRIX*vec4(VERTEX,1.0)).xyz;
 	float detail = 1.0-smoothstep(35.0,85.0,length(world_pos.xz-view_origin.xz));
-	VERTEX.y += (wave(swirl(world_pos.xz))-0.5)*8.0*detail;
+	VERTEX.y += (wave(swirl(world_pos.xz))-0.5)*0.45*detail;
 	vec2 vortex = world_pos.xz-vec2(145.0,145.0);
 	VERTEX.y -= 18.0*exp(-dot(vortex,vortex)/1800.0)*detail;
 }

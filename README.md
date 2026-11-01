@@ -3,7 +3,7 @@
 A playable 3D exploration and survival prototype inside a shifting electronic labyrinth.
 
 - [Play in your browser](https://acsokis.github.io/velum/)
-- [Download for Windows](https://github.com/acsokis/velum/releases/download/v0.1.1-preview/VELUM-Windows.zip)
+- [Download for Windows](https://github.com/acsokis/velum/releases/download/v0.1.2-preview/VELUM-Windows.zip)
 - [Releases](https://github.com/acsokis/velum/releases)
 
 ## Windows

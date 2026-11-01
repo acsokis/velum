@@ -95,11 +95,16 @@ var labyrinth
 var labyrinth_enabled = false
 var visual_fx
 var procedural_detail
+var coast
 var last_dlss_report = 0.0
 const MOUNTS = ["Handheld", "Left wrist", "Right wrist", "Left forearm", "Right forearm", "Dock", "Detached inspection"]
 const PANELS = ["STATUS", "LOCAL MAP", "SCANNER", "PROBE", "MESSAGES", "PAIRING"]
 
 func _ready():
+	if OS.has_feature("web"):
+		set_physics_process(false);set_process(false);set_process_input(false);set_process_unhandled_input(false)
+		web_loading("Forming the landscape")
+		await get_tree().process_frame
 	if OS.has_feature("web") and bool(JavaScriptBridge.eval("location.hash === '#render-benchmark'")):
 		set_physics_process(false);set_process(false);set_process_unhandled_input(false)
 		var benchmark = load("res://render_benchmark.gd").new();add_child(benchmark);return
@@ -125,6 +130,9 @@ func _ready():
 	make_environment()
 	if dlss_test: print("VELUM_BOOT environment")
 	make_world()
+	if OS.has_feature("web"):
+		web_loading("Awakening the ecosystem")
+		await get_tree().process_frame
 	if dlss_test: print("VELUM_BOOT world")
 	make_player()
 	if dlss_test: print("VELUM_BOOT player")
@@ -140,6 +148,7 @@ func _ready():
 	make_network()
 	weather = load("res://weather.gd").new();add_child(weather);weather.setup(self)
 	procedural_detail = load("res://procedural_detail.gd").new();add_child(procedural_detail);procedural_detail.setup(self)
+	coast = load("res://coast.gd").new();add_child(coast);coast.setup(self)
 	if DisplayServer.get_name() != "headless":
 		visual_fx = load("res://visual_fx.gd").new();add_child(visual_fx);visual_fx.setup(self)
 	if terrain_test:
@@ -148,6 +157,14 @@ func _ready():
 	if not OS.has_feature("web") and not smoke and not visual_test and not "--demo" in OS.get_cmdline_user_args():
 		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	notify("SHELL // Press E to hatch. "+(labyrinth.status() if labyrinth != null else "A bounded survey sector awaits."))
+	if OS.has_feature("web"):
+		web_loading("Preparing light and atmosphere")
+		for i in range(12): await get_tree().process_frame
+		set_physics_process(true);set_process(true);set_process_input(true);set_process_unhandled_input(true)
+		JavaScriptBridge.eval("window.dispatchEvent(new Event('velum-ready'));")
+
+func web_loading(message: String):
+	if OS.has_feature("web"): JavaScriptBridge.eval("window.dispatchEvent(new CustomEvent('velum-loading',{detail:"+JSON.stringify(message)+"}));")
 
 func mat(color: Color, emission = 0.0) -> StandardMaterial3D:
 	var m = StandardMaterial3D.new()
@@ -626,8 +643,9 @@ func _physics_process(delta):
 		if player.is_on_floor() and Input.is_physical_key_pressed(KEY_SPACE) and Input.mouse_mode == Input.MOUSE_MODE_CAPTURED:
 			player.velocity.y = 6
 		player.move_and_slide()
-		player.position.x = clampf(player.position.x,-115,115)
-		player.position.z = clampf(player.position.z,-115,115)
+		player.position.x = clampf(player.position.x,-127,127)
+		player.position.z = clampf(player.position.z,-127,127)
+		if coast != null and player.position.y < -3.5: coast.rescue_player()
 		var ambient = 14.0 if player.position.x < 0 else 46.0
 		temperature = move_toward(temperature,ambient,delta*(0.08 if upgrade else 0.22))
 		energy = maxf(0,energy-delta*(0.035+axis.length()*0.035))
@@ -847,6 +865,7 @@ func save_game():
 	if labyrinth != null: state["labyrinth"] = labyrinth.snapshot()
 	if weather != null: state["weather"] = weather.snapshot_state()
 	state["population"] = spawning.snapshot_state()
+	if coast != null: state["coast"] = coast.snapshot_state()
 	f.store_string(JSON.stringify(state))
 	f.close()
 	notify("Saved in browser storage." if OS.has_feature("web") else "Saved locally on D: • sessions and credentials excluded.")
@@ -875,6 +894,7 @@ func load_game():
 	probe_angle = s.probe
 	salvage.cancel()
 	if weather != null and s.get("weather") is Dictionary: weather.restore_state(s.weather)
+	if coast != null: coast.restore_state(s.get("coast",{}))
 	for r in s.resources:
 		if int(r.id) < resources.size():
 			resources[int(r.id)].cooldown = maxf(0,r.cooldown)
