@@ -26,7 +26,8 @@ jobs:
         run: |
           gh release download v0.1.0-preview --repo "$GITHUB_REPOSITORY" --pattern VELUM-web.zip
           echo '2d889dcfa4534d58cef03c791ebcfa30a801116958128a4e3b35eb7e6c895ecf  VELUM-web.zip' | sha256sum --check
-          unzip -q VELUM-web.zip -d release
+          # Windows Compress-Archive emits backslash paths; unzip returns 1 for that warning.
+          unzip -q VELUM-web.zip -d release || test "$?" -eq 1
           test -f release/build-web/index.html
           cp -r release/licenses release/build-web/licenses
           touch release/build-web/.nojekyll
